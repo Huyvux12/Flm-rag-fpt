@@ -1,0 +1,35 @@
+{
+  "schema_version": "v1.0.0",
+  "generated_at": "2026-03-23T04:35:54Z",
+  "input_dir": "data",
+  "output_dir": "data\\processed\\v1",
+  "input_files": [
+    "flm_data_AI.json",
+    "flm_data_BBA_CF.json",
+    "flm_data_BBA_FIN.json",
+    "flm_data_BBA_FT.json",
+    "flm_data_BBA_HM.json",
+    "flm_data_BBA_IB.json",
+    "flm_data_BBA_TM.json",
+    "flm_data_BCH_BC.json",
+    "flm_data_BCH_CL.json",
+    "flm_data_BCH_EN.json",
+    "flm_data_IA.json",
+    "flm_data_LLB.json",
+    "flm_data_LLB_LA.json",
+    "flm_data_MKT.json",
+    "flm_data_SE.json"
+  ],
+  "stats": {
+    "curriculum_semester_chunks": 227,
+    "offering_map": 602,
+    "canonical_syllabus": 243,
+    "syllabus_detail_chunks": 13519
+  },
+  "parquet_written": {
+    "curriculum_semester_chunks.parquet": true,
+    "offering_map.parquet": true,
+    "canonical_syllabus.parquet": true,
+    "syllabus_detail_chunks.parquet": true
+  }
+}

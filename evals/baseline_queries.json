@@ -1,0 +1,54 @@
+[
+  {
+    "query": "AI kỳ 4 học gì?",
+    "expected_major_code": "AI",
+    "expected_semester": 4
+  },
+  {
+    "query": "Môn AIL303m học ngành nào và ở kỳ mấy?",
+    "expected_course_id": "AIL303m",
+    "expected_major_code": "AI",
+    "expected_semester": 4
+  },
+  {
+    "query": "Machine Learning của AI có learning outcomes gì?",
+    "expected_course_id": "AIL303m",
+    "expected_major_code": "AI",
+    "expected_chunk_type": "learning_outcomes"
+  },
+  {
+    "query": "Tài liệu môn DPL302m là gì?",
+    "expected_course_id": "DPL302m",
+    "expected_chunk_type": "materials"
+  },
+  {
+    "query": "Schedule của LAB211 là gì?",
+    "expected_course_id": "LAB211",
+    "expected_chunk_type": "schedule"
+  },
+  {
+    "query": "SE kỳ 8 có môn nào?",
+    "expected_major_code": "SE",
+    "expected_semester": 8
+  },
+  {
+    "query": "Assessment của CEA201",
+    "expected_course_id": "CEA201",
+    "expected_chunk_type": "assessments"
+  },
+  {
+    "query": "AI17_COM3 kỳ 5 của ngành AI có môn nào?",
+    "expected_major_code": "AI",
+    "expected_semester": 5
+  },
+  {
+    "query": "Mô tả môn OOP with Java Lab",
+    "expected_course_id": "LAB211",
+    "expected_chunk_type": "overview"
+  },
+  {
+    "query": "Ngành AI semester 2 có course nào?",
+    "expected_major_code": "AI",
+    "expected_semester": 2
+  }
+]
