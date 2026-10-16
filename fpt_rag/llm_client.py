@@ -135,11 +135,17 @@ class OpenAICompatibleLlmClient:
             for line in response.iter_lines():
                 if not line:
                     continue
-                if line.startswith("data: "):
-                    line = line[6:]
+                if not line.startswith("data:"):
+                    continue
+                line = line[5:].strip()
                 if line == "[DONE]":
                     break
-                payload = json.loads(line)
+                if not line:
+                    continue
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
                 choices = payload.get("choices", [])
                 if not choices:
                     continue

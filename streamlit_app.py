@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from html import escape
 
 import streamlit as st
 
@@ -222,8 +223,8 @@ def render_sources_for_message(message: dict[str, object]) -> None:
         st.markdown(
             f"""
             <div class="source-chip">
-              <div class="source-chip-title">#{idx} {hit['title']}</div>
-              <div class="source-chip-meta">{hit['meta']}</div>
+              <div class="source-chip-title">#{idx} {escape(str(hit['title']))}</div>
+              <div class="source-chip-meta">{escape(str(hit['meta']))}</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -321,7 +322,7 @@ with left:
         )
 
         history = compact_history(st.session_state["messages"][:-1], limit=6)
-        response = retriever.search(prompt, top_k=6)
+        response = retriever.search(prompt, top_k=6, history=history)
 
         with st.chat_message("assistant"):
             st.markdown(
