@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+scripts/chrome_profile/
+artifacts/evals/
+artifacts/bm25_syllabus_detail.json
+qdrant_storage/
