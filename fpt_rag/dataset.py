@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -20,6 +22,27 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, ensure_ascii=False, indent=2)
+
+
+def ensure_dataset(dataset_dir: Path, project_root: Path) -> None:
+    """Rebuild missing derived JSONL files from the checked-in raw FLM JSON sources."""
+    required = (
+        "curriculum_semester_chunks.jsonl", "offering_map.jsonl",
+        "canonical_syllabus.jsonl", "syllabus_detail_chunks.jsonl",
+    )
+    if all((dataset_dir / name).is_file() for name in required):
+        return
+    raw_dir = project_root / "data"
+    if not list(raw_dir.glob("flm_data_*.json")):
+        raise FileNotFoundError(f"No prepared dataset in {dataset_dir} and no raw data in {raw_dir}")
+    subprocess.run(
+        [sys.executable, str(project_root / "scripts" / "prepare_rag_dataset.py"),
+         "--input-dir", str(raw_dir), "--output-dir", str(dataset_dir)],
+        check=True,
+    )
+    missing = [name for name in required if not (dataset_dir / name).is_file()]
+    if missing:
+        raise FileNotFoundError(f"Dataset generation did not produce: {missing}")
 
 
 def load_dataset_bundle(dataset_dir: Path) -> dict[str, list[dict[str, Any]]]:
