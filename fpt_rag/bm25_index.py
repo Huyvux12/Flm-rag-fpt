@@ -9,7 +9,7 @@ from typing import Any
 
 from rank_bm25 import BM25Okapi
 
-TOKEN_RE = re.compile(r"[A-Za-z0-9_.-]+")
+TOKEN_RE = re.compile(r"[^\W_]+(?:[_.-][^\W_]+)*", re.UNICODE)
 
 
 def tokenize(text: str) -> list[str]:
@@ -41,6 +41,8 @@ class Bm25Index:
             json.dump({"docs": self.docs, "tokenized_corpus": self.tokenized_corpus}, handle, ensure_ascii=False)
 
     def search(self, query: str, top_k: int, metadata_filter: dict[str, Any] | None = None) -> list[tuple[dict[str, Any], float]]:
+        if top_k < 1:
+            return []
         tokens = tokenize(query)
         if not tokens:
             return []
@@ -49,7 +51,7 @@ class Bm25Index:
         for doc, score in zip(self.docs, raw_scores, strict=True):
             if metadata_filter and not _matches_filter(doc.get("payload", {}), metadata_filter):
                 continue
-            if not math.isfinite(float(score)):
+            if not math.isfinite(float(score)) or score <= 0:
                 continue
             scored.append((doc, float(score)))
         scored.sort(key=lambda item: item[1], reverse=True)

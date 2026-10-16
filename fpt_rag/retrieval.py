@@ -8,7 +8,7 @@ from typing import Any
 
 from .bm25_index import Bm25Index
 from .config import Settings
-from .dataset import read_jsonl
+from .dataset import ensure_dataset, read_jsonl
 from .embedding_api import EmbeddingApiClient
 from .models import ParsedQuery, QueryFilters, RetrievalHit, RetrievalResponse
 from .qdrant_store import QdrantStore
@@ -25,7 +25,6 @@ CHUNK_HINTS = {
     "tai lieu": "materials",
     "schedule": "schedule",
     "lich hoc": "schedule",
-    "lich": "schedule",
     "overview": "overview",
     "mo ta": "overview",
 }
@@ -51,8 +50,22 @@ def normalize_text(text: str) -> str:
 class HybridRetriever:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+        ensure_dataset(settings.dataset_dir, settings.project_root)
         self.embedding = EmbeddingApiClient(settings)
         self.qdrant = QdrantStore(settings)
+        from .dataset import load_dataset_bundle
+        if not settings.bm25_syllabus_path.exists() or not settings.bm25_curriculum_path.exists():
+            bundle = load_dataset_bundle(settings.dataset_dir)
+            if not settings.bm25_syllabus_path.exists():
+                Bm25Index.build([
+                    {"id": r["chunk_id"], "text": r["text"], "payload": r}
+                    for r in bundle["syllabus_detail"]
+                ]).save(settings.bm25_syllabus_path)
+            if not settings.bm25_curriculum_path.exists():
+                Bm25Index.build([
+                    {"id": r["chunk_id"], "text": r["text"], "payload": r}
+                    for r in bundle["curriculum"]
+                ]).save(settings.bm25_curriculum_path)
         self.syllabus_bm25 = Bm25Index.load(settings.bm25_syllabus_path)
         self.curriculum_bm25 = Bm25Index.load(settings.bm25_curriculum_path)
         self.offering_by_key = {row["offering_key"]: row for row in read_jsonl(settings.offering_map_path)}
@@ -80,6 +93,7 @@ class HybridRetriever:
 
     def close(self) -> None:
         self.embedding.close()
+        self.qdrant.close()
 
     def parse_query(self, text: str) -> ParsedQuery:
         normalized = " ".join(text.split())
@@ -122,18 +136,46 @@ class HybridRetriever:
             intent_group = "semantic"
         return ParsedQuery(raw_text=text, normalized_text=normalized, filters=filters, target_index=target_index, intent_group=intent_group)
 
-    def search(self, text: str, top_k: int | None = None) -> RetrievalResponse:
+    def contextualize_query(self, text: str, history: list[dict[str, str]] | None = None) -> str:
+        """Resolve basic course/semester references before searching the indexes."""
+        if not history or not re.search(
+            r"\b(mon do|mon nay|ky do|ky nay|that (?:course|semester)|that one)\b",
+            normalize_text(text),
+        ):
+            return text
+        current = self.parse_query(text)
+        if current.filters.course_id or current.filters.semester is not None:
+            return text
+        for message in reversed(history):
+            if message.get("role") != "user":
+                continue
+            previous = self.parse_query(message.get("content", ""))
+            details = []
+            if previous.filters.course_id:
+                details.append(previous.filters.course_id)
+            if previous.filters.major_code:
+                details.append(previous.filters.major_code)
+            if previous.filters.semester is not None:
+                details.append(f"semester {previous.filters.semester}")
+            if details:
+                return text + " " + " ".join(details)
+        return text
+
+    def search(self, text: str, top_k: int | None = None, history: list[dict[str, str]] | None = None) -> RetrievalResponse:
         started = time.perf_counter()
-        parsed = self.parse_query(text)
-        top_k = top_k or self.settings.top_k_default
+        query = self.contextualize_query(text, history)
+        parsed = self.parse_query(query)
+        top_k = self.settings.top_k_default if top_k is None else top_k
+        if top_k < 1:
+            raise ValueError("top_k must be positive")
         metadata_filter = parsed.filters.active_items()
         collection = self.settings.qdrant_curriculum_collection if parsed.target_index == "curriculum" else self.settings.qdrant_syllabus_collection
         bm25_index = self.curriculum_bm25 if parsed.target_index == "curriculum" else self.syllabus_bm25
-        bm25_hits = bm25_index.search(text, top_k=top_k * 3, metadata_filter=metadata_filter)
-        query_vector = self.embedding.embed_query(text)
+        bm25_hits = bm25_index.search(query, top_k=top_k * 3, metadata_filter=metadata_filter)
+        query_vector = self.embedding.embed_query(query)
         vector_hits = self.qdrant.search(collection, query_vector=query_vector, top_k=top_k * 3, metadata_filter=metadata_filter)
-        merged = self._rrf_merge(bm25_hits, vector_hits, top_k=top_k)
-        merged = self._rerank_hits(parsed, merged)
+        merged = self._rrf_merge(bm25_hits, vector_hits, top_k=top_k * 3)
+        merged = self._rerank_hits(parsed, merged)[:top_k]
         latency_ms = (time.perf_counter() - started) * 1000
         return RetrievalResponse(parsed_query=parsed, hits=merged, latency_ms=latency_ms)
 
@@ -205,7 +247,7 @@ def print_contract(settings: Settings) -> str:
         "retrieval_flow": [
             "parse exact/filter intent first",
             "apply metadata pre-filter",
-            "search BM25 and Qdrant in parallel",
+            "search BM25 and Qdrant sequentially",
             "merge with reciprocal rank fusion",
             "join offering_map for final context",
         ],

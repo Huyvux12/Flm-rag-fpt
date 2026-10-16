@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 @dataclass(slots=True)
 class Settings:
     project_root: Path = field(default_factory=lambda: Path(__file__).resolve().parents[1])
-    workspace_root: Path = field(default_factory=lambda: Path(__file__).resolve().parents[2])
+    workspace_root: Path = field(default_factory=lambda: Path(__file__).resolve().parents[1])
     dataset_dir: Path = field(init=False)
     artifacts_dir: Path = field(default_factory=lambda: Path(__file__).resolve().parents[1] / "artifacts")
     embedding_api_base_url: str = field(default_factory=lambda: os.getenv("EMBEDDING_API_BASE_URL", "https://wildojisan-embeddinggemma-300m-fastapi.hf.space"))
@@ -28,6 +28,8 @@ class Settings:
     bm25_curriculum_path: Path = field(init=False)
     offering_map_path: Path = field(init=False)
     eval_queries_path: Path = field(init=False)
+    embedding_provider: str = field(default_factory=lambda: os.getenv("EMBEDDING_PROVIDER", "api"))
+    embedding_local_model: str = field(default_factory=lambda: os.getenv("EMBEDDING_LOCAL_MODEL", "google/embeddinggemma-300m"))
     vector_size: int = 768
     batch_size: int = field(default_factory=lambda: int(os.getenv("RAG_BATCH_SIZE", "32")))
     request_timeout_s: float = 60.0
@@ -49,8 +51,16 @@ class Settings:
         self.llm_model = os.getenv("LLM_MODEL", self.llm_model)
         self.llm_timeout_s = float(os.getenv("LLM_TIMEOUT_S", str(self.llm_timeout_s)))
         self.batch_size = int(os.getenv("RAG_BATCH_SIZE", str(self.batch_size)))
+        self.embedding_provider = os.getenv("EMBEDDING_PROVIDER", self.embedding_provider).lower()
+        self.embedding_local_model = os.getenv("EMBEDDING_LOCAL_MODEL", self.embedding_local_model)
+        if self.embedding_provider not in {"api", "sentence-transformers"}:
+            raise ValueError("EMBEDDING_PROVIDER must be api or sentence-transformers")
+        if self.embedding_provider == "sentence-transformers" and not os.getenv("EMBEDDING_MODEL_VERSION"):
+            self.embedding_model_version = f"{self.embedding_local_model}:sentence-transformers:v1"
+        if self.batch_size < 1:
+            raise ValueError("RAG_BATCH_SIZE must be positive")
 
-        self.dataset_dir = self.workspace_root / "data" / "processed" / "v1"
+        self.dataset_dir = self.project_root / "data" / "processed" / "v1"
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
         self.bm25_syllabus_path = self.artifacts_dir / "bm25_syllabus_detail.json"
         self.bm25_curriculum_path = self.artifacts_dir / "bm25_curriculum_map.json"

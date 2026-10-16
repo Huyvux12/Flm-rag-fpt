@@ -11,3 +11,16 @@ dependencies = [
     "rank-bm25>=0.2.2",
     "streamlit>=1.56.0",
 ]
+
+[project.optional-dependencies]
+embedding-local = ["sentence-transformers>=3.4.0"]
+crawler = ["playwright>=1.50.0"]
+test = ["pytest>=8.3.0"]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["fpt_rag*"]
+exclude = ["data*", "artifacts*", "notebooks*", "evals*", "scripts*", "tests*"]

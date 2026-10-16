@@ -5,7 +5,7 @@ from typing import Any
 
 from .bm25_index import Bm25Index
 from .config import Settings
-from .dataset import batched, load_dataset_bundle
+from .dataset import batched, ensure_dataset, load_dataset_bundle
 from .embedding_api import EmbeddingApiClient
 from .qdrant_store import QdrantStore
 
@@ -44,6 +44,7 @@ def build_indexes(settings: Settings, dataset_dir: str | None = None) -> dict[st
     if dataset_dir:
         settings.dataset_dir = Path(dataset_dir).resolve()
         settings.offering_map_path = settings.dataset_dir / "offering_map.jsonl"
+    ensure_dataset(settings.dataset_dir, settings.project_root)
     print(f"Loading dataset from {settings.dataset_dir}")
     bundle = load_dataset_bundle(settings.dataset_dir)
     embedding = EmbeddingApiClient(settings)
@@ -53,21 +54,30 @@ def build_indexes(settings: Settings, dataset_dir: str | None = None) -> dict[st
     syllabus_records = build_index_records(bundle["syllabus_detail"], settings=settings)
     print(f"Prepared curriculum records={len(curriculum_records)} syllabus_records={len(syllabus_records)}")
 
-    qdrant.ensure_collection(settings.qdrant_curriculum_collection)
-    qdrant.ensure_collection(settings.qdrant_syllabus_collection)
-    print("Collections ensured")
+    try:
+        qdrant.ensure_collection(settings.qdrant_curriculum_collection)
+        qdrant.ensure_collection(settings.qdrant_syllabus_collection)
+        print("Collections ensured")
 
-    curriculum_vectors = _embed_in_batches(curriculum_records, embedding, batch_size=settings.batch_size, label="curriculum")
-    syllabus_vectors = _embed_in_batches(syllabus_records, embedding, batch_size=settings.batch_size, label="syllabus")
+        for label, records, collection_name in (
+            ("curriculum", curriculum_records, settings.qdrant_curriculum_collection),
+            ("syllabus", syllabus_records, settings.qdrant_syllabus_collection),
+        ):
+            uploaded = 0
+            for idx, batch in enumerate(batched(records, settings.batch_size), start=1):
+                print(f"[{label}] embedding + upload batch {idx} size={len(batch)}")
+                vectors = embedding.embed_documents([record["text"] for record in batch])
+                if len(vectors) != len(batch):
+                    raise ValueError(f"{label} vector count mismatch")
+                qdrant.upload_records(collection_name, batch, vectors)
+                uploaded += len(batch)
+            print(f"[{label}] uploaded {uploaded} records")
 
-    _upload_in_batches(curriculum_records, curriculum_vectors, qdrant, settings.qdrant_curriculum_collection, batch_size=settings.batch_size, label="curriculum")
-    _upload_in_batches(syllabus_records, syllabus_vectors, qdrant, settings.qdrant_syllabus_collection, batch_size=settings.batch_size, label="syllabus")
-
-    print("Building BM25 artifacts")
-    Bm25Index.build(curriculum_records).save(settings.bm25_curriculum_path)
-    Bm25Index.build(syllabus_records).save(settings.bm25_syllabus_path)
-
-    embedding.close()
+        Bm25Index.build(curriculum_records).save(settings.bm25_curriculum_path)
+        Bm25Index.build(syllabus_records).save(settings.bm25_syllabus_path)
+    finally:
+        embedding.close()
+        qdrant.close()
     return {
         "dataset_dir": str(settings.dataset_dir),
         "curriculum_indexed": len(curriculum_records),
